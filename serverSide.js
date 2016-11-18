@@ -36,9 +36,51 @@ function main(){
             if(method == 'POST'){
                 console.log('POST');
                 var jsonBody = JSON.parse(body);
-                dbContent['secretQuestion'] += jsonBody.secretQuestion + ',';
-                dbContent['username'] += jsonBody.username + ',';
-                dbContent['password'] += jsonBody.password + ',';
+        
+                console.log(JSON.stringify(jsonBody));
+                if(jsonBody.username){
+                    dbContent['secretQuestion'].push(jsonBody.secretQuestion);
+                    dbContent['username'].push(jsonBody.username);
+                    dbContent['password'].push(jsonBody.password);
+                    dbContent[jsonBody.username + '-Profile'] = 
+                        {friends:[], requestsFrom:[], Level:0, Wins:0};
+                }
+                
+                else if(jsonBody.reciever){
+                    var recieverProfile = dbContent[jsonBody.reciever + '-Profile'],
+                        requesterIndex = 
+                        findElement(recieverProfile['requestsFrom'], jsonBody.requester);
+                    if(requesterIndex == -1)
+                        recieverProfile['requestsFrom'].push(jsonBody.requester);
+                    console.log(recieverProfile);
+                }
+                
+                else if(jsonBody.concordant){
+                    var chatDb = dbContent['chat'],
+                        concordantProfile = dbContent[jsonBody.concordant + '-Profile'],
+                        requesterProfile = dbContent[jsonBody.requester + '-Profile'],
+                        nameAt = 
+                        findElement(concordantProfile['requestsFrom'], jsonBody.requester);
+                    concordantProfile.requestsFrom.splice(nameAt, 1);
+                    concordantProfile.friends.push(jsonBody.requester);
+                    requesterProfile.friends.push(jsonBody.concordant);
+                    chatDb[jsonBody.requester + '-' + jsonBody.concordant] = [];
+                }
+                
+                else if(jsonBody.stateValue){
+                    var userProfile = dbContent[jsonBody.user + '-Profile'];
+                    userProfile['State'] = jsonBody.stateValue;
+                }
+                
+                else if(jsonBody.message){
+                    var chatDb = dbContent['chat'],
+                        chatWindow = chatDb[jsonBody.sender + '-' + jsonBody.deliverTo];
+                    if(!chatWindow)
+                        chatWindow = chatDb[jsonBody.deliverTo + '-' + jsonBody.sender];
+                    
+                    chatWindow.push(jsonBody.sender + ': ' + jsonBody.message);
+                    chatDb[jsonBody.sender + '-' + jsonBody.deliverTo] = chatWindow;
+                }
             }
             
             else
@@ -63,6 +105,18 @@ function main(){
     }).listen(1234); 
     
     console.log('Server is running on port 1234');
+}
+
+function findElement(array, element){
+    var i,
+        length = array.length;
+    
+    for(i = 0; i < length; i+=1){
+        if(array[i] == element)
+            return i;
+    }
+    
+    return -1;
 }
 
 function displayForm(res){

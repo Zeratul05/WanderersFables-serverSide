@@ -28,7 +28,6 @@ exports.register = function(key){
         if(isPasswordSet){
             isUsernameSet = false;
             isPasswordSet = false;
-            hasRegistered = false;
             
             variables.postRequest();
             
