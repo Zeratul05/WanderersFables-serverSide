@@ -81,6 +81,11 @@ function main(){
                     chatWindow.push(jsonBody.sender + ': ' + jsonBody.message);
                     chatDb[jsonBody.sender + '-' + jsonBody.deliverTo] = chatWindow;
                 }
+                
+                else if(jsonBody.deck){
+                    var ownerProfile = dbContent[jsonBody.owner + '-Profile'];
+                    ownerProfile['decks'].push(jsonBody.deck);
+                }
             }
             
             else
