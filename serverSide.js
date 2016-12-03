@@ -9,7 +9,6 @@ var fs = require('fs'),
     msg['mama'] = '';
 
 function main(){
-    
     http.createServer(function(req, res){
         var headers  = req.headers,
             method = req.method,
@@ -32,9 +31,11 @@ function main(){
             
             res.statusCode = 200;
             res.setHeader('Content-Type', 'application/json');
+
+            console.log(method);
+
             
             if(method == 'POST'){
-                console.log('POST');
                 var jsonBody = JSON.parse(body);
         
                 console.log(JSON.stringify(jsonBody));
@@ -42,12 +43,13 @@ function main(){
                     dbContent['secretQuestion'].push(jsonBody.secretQuestion);
                     dbContent['username'].push(jsonBody.username);
                     dbContent['password'].push(jsonBody.password);
-                    dbContent[jsonBody.username + '-Profile'] = 
+                    dbContent[jsonBody.username + userID] = 
                         {friends:[], requestsFrom:[], Level:0, Wins:0};
                 }
                 
                 else if(jsonBody.reciever){
-                    var recieverProfile = dbContent[jsonBody.reciever + '-Profile'],
+                    var recieverProfile = 
+                        dbContent[jsonBody.reciever + jsonBody.recieverID],
                         requesterIndex = 
                         findElement(recieverProfile['requestsFrom'], jsonBody.requester);
                     if(requesterIndex == -1)
@@ -57,35 +59,54 @@ function main(){
                 
                 else if(jsonBody.concordant){
                     var chatDb = dbContent['chat'],
-                        concordantProfile = dbContent[jsonBody.concordant + '-Profile'],
-                        requesterProfile = dbContent[jsonBody.requester + '-Profile'],
-                        nameAt = 
-                        findElement(concordantProfile['requestsFrom'], jsonBody.requester);
+                    concordantProfile = dbContent[jsonBody.concordant+ 
+                                                  jsonBody.concordantID],
+                    requesterProfile = dbContent[jsonBody.requester +            
+                                                     jsonBody.requesterID],
+                    nameAt = findElement(
+                            concordantProfile['requestsFrom'], jsonBody.requester);
                     concordantProfile.requestsFrom.splice(nameAt, 1);
-                    concordantProfile.friends.push(jsonBody.requester);
-                    requesterProfile.friends.push(jsonBody.concordant);
-                    chatDb[jsonBody.requester + '-' + jsonBody.concordant] = [];
+                    concordantProfile.friends.push(jsonBody.requester 
+                                                   +jsonBody.requesterID);
+                    requesterProfile.friends.push(jsonBody.concordant + 
+                                                  jsonBody.concordantID);
+                    chatDb[jsonBody.requester+ jsonBody.requesterID + '-' 
+                           + jsonBody.concordant + jsonBody.concordantID] = [];
                 }
                 
                 else if(jsonBody.stateValue){
-                    var userProfile = dbContent[jsonBody.user + '-Profile'];
-                    userProfile['State'] = jsonBody.stateValue;
+                    var userProfile = dbContent[jsonBody.user +jsonBody.userID];
+                    console.log(userProfile);
+                    userProfile['state'] = jsonBody.stateValue;
                 }
                 
                 else if(jsonBody.message){
-                    var chatDb = dbContent['chat'],
-                        chatWindow = chatDb[jsonBody.sender + '-' + jsonBody.deliverTo];
-                    if(!chatWindow)
-                        chatWindow = chatDb[jsonBody.deliverTo + '-' + jsonBody.sender];
+                    var chatDb = dbContent['chat'];
+                       // chatWindow = ;
+                   
+                    console.log('1)' + jsonBody.sender +jsonBody.senderID + '-' + 
+                                jsonBody.deliverTo);
+                    console.log('2)' + jsonBody.deliverTo + '-' + jsonBody.sender+ 
+                                jsonBody.senderID);
+                    if(!chatDb[jsonBody.sender + jsonBody.senderID + '-' +
+                               jsonBody.deliverTo]){
+                        
+                        chatDb[jsonBody.deliverTo+ '-' +
+                               jsonBody.sender +jsonBody.senderID]
+                            .push(jsonBody.sender + ': ' + jsonBody.message);
+                    }
                     
-                    chatWindow.push(jsonBody.sender + ': ' + jsonBody.message);
-                    chatDb[jsonBody.sender + '-' + jsonBody.deliverTo] = chatWindow;
+                    else{
+                        chatDb[jsonBody.sender+ jsonBody.senderID + '-' 
+                               + jsonBody.deliverTo]
+                            .push(jsonBody.sender + ': ' + jsonBody.message);
+                    }
                 }
                 
                 else if(jsonBody.deck){
-                    var ownerProfile = dbContent[jsonBody.owner + '-Profile'];
-                    ownerProfile['decks'].push(jsonBody.deck);
-                }
+                    var ownerProfile = dbContent[jsonBody.owner+ userID];
+                    console.log(jsonBody.deck.toString());
+                }   
             }
             
             else
