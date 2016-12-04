@@ -43,9 +43,14 @@ function main(){
                     dbContent['secretQuestion'].push(jsonBody.secretQuestion);
                     dbContent['username'].push(jsonBody.username);
                     dbContent['password'].push(jsonBody.password);
-                    dbContent[jsonBody.username + userID] = 
-                        {friends:[], requestsFrom:[], Level:0, Wins:0};
-                }
+                    /*var userId;
+
+                    while(!userId || dbContent[jsonBody.username + '#' + userId])
+                         userId = Math.round(Math.random()* 9) + Math.round(Math.random()* 9) * 10 + 
+                                 Math.round(Math.random()* 9) *100 + Math.round(Math.random()* 9) *1000;
+                    
+                    dbContent[jsonBody.username + '#' + userID] = {friends:[], requestsFrom:[], Level:0, Wins:0};
+                */}
                 
                 else if(jsonBody.reciever){
                     var recieverProfile = 
@@ -104,9 +109,9 @@ function main(){
                 }
                 
                 else if(jsonBody.deck){
-                    var ownerProfile = dbContent[jsonBody.owner+ userID];
+                 /*   var ownerProfile = dbContent[jsonBody.owner+ userID];
                     console.log(jsonBody.deck.toString());
-                }   
+                */}   
             }
             
             else
@@ -128,7 +133,7 @@ function main(){
             displayForm(res);
         else if(method == 'POST')
             processFormFieldsIndividual(req, res);*/
-    }).listen(1234); 
+    }).listen(1234, '25.114.253.33'); 
     
     console.log('Server is running on port 1234');
 }
