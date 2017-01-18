@@ -1,5 +1,6 @@
 var fs = require('fs'),
     http = require('http'),
+    crypto=require('crypto'),
     request = require('request'),
     util = require('util'),
     express = require('express'),
@@ -116,8 +117,8 @@ function main(){
                 
                 else if(jsonBody.character){
                     characters[jsonBody.owner + jsonBody.ownerID].push({
-                        name:jsonBody.character,level:jsonBody.level, exp:jsonBody.exp, 
-                        class: jsonBody.class,spells:jsonBody.spells});
+                        name:jsonBody.character,level:jsonBody.level, exp:jsonBody.exp,
+                        spells:jsonBody.spells});
                 }
                 
                 else if(jsonBody.deck)
@@ -149,45 +150,84 @@ function main(){
     }).listen(1234); 
     
     var io = require('socket.io')(server);
+    var database = JSON.parse(fs.readFileSync('betaDummy.JSON'));
+    var decks = JSON.parse(fs.readFileSync('decks.JSON'));
+    var characters = JSON.parse(fs.readFileSync('characters.json'));
+    var playGame = [];
+    var inGame=[];
     
     io.on('connection', function (socket){
-        var database = JSON.parse(fs.readFileSync('betaDummy.JSON')),
-            decks = JSON.parse(fs.readFileSync('decks.JSON')),
-            characters = JSON.parse(fs.readFileSync('characters.json')),
-            queuedFor = JSON.parse(fs.readFileSync('queuedFor.json'));
         console.log('connection');
+        
+        socket.emit('pong');
         
         var isLoggedIn;
         
         socket.on('LogIn', function(data){
-            var userId = '#' + database['uid']                  
-            [findElement(database['username'],data.username)];
+            var emailIndex =findElement(database['email'],data.email),
+                emailPassword = database['password'][emailIndex],
+                username = database['username'][emailIndex];
             
-            if(findElement(database['username'], data.username) == 
-               findElement(database['password'], data.password))
-                isLoggedIn = true;
-         
-            if(!isLoggedIn)
+            // the email does not exist return login has failed
+            if(emailIndex == undefined){
+                console.log(data.email + ' - ' + emailIndex);
+                socket.emit('LogConfirm', {isLoggedIn: isLoggedIn});
                 return;
+            }
+            
+            crypto.pbkdf2(data.password,emailPassword.salt,
+                               emailPassword.iterations, 512, 'sha512',
+                              function(err, key){
+                if(key.toString('hex') == emailPassword.hash){
+                    isLoggedIn = true;
+                    console.log('treeasi');
+                    var userId = '#' + database['uid'][emailIndex];
                 
-           database[data.username+userId]['state']=
-               database[data.username+userId]['lastState'];
+                    database[username+userId]['state']=
+                        database[username+userId]['lastState'];
             
-            socket.emit('LoggedState', {state:database[data.username+userId]['lastState']});
-            socket.emit('LogConfirm', {isLogged: isLoggedIn});
-            socket.emit('UserID', 
-                        {userID: userId});
-            socket.emit('UserData', {profile: database[data.username+userId]});
-            console.log(data.username+userId);
-            socket.emit('Characters', {chars: characters[data.username+userId]});
-            socket.emit('Decks', {createdDecks: decks[data.username+userId]});
+                    socket.emit('LogConfirm', {isLogged: isLoggedIn});
+                    socket.emit('userData', 
+                                {state:database[username+userId]['lastState'],
+                                username: username, userID: userId,
+                                 profile: database[username+userId],
+                                 chars: characters[username+userId],
+                                 createdDecks: decks[username+userId]});
+                }
+                
+                else{
+                    socket.emit('LogConfirm', {isLogged: isLoggedIn});
+                }
+            });
             
-            fs.writeFile('betaDummy.json', JSON.stringify(database));
+            if(!isLoggedIn){       
+                return;
+            }
         });
                 
         socket.on('Register', function(data){
+            var emailIndex =findElement(database['email'],data.email); 
+            
+            // check if email already exists if it does register has failed
+            if(emailIndex || emailIndex == 0){//because 0 is false 
+               socket.emit('registerFailed', {});
+                return;
+            }
+            // 1) generate the salt
+            // 2) decide how much iterations the new hash is
+            // 3) save the salt, iterations and the created hash
+            var salt = crypto.randomBytes(128).toString('base64');
+            var iterations = 10000;
+            crypto.pbkdf2(data.password, salt,iterations,512, 'sha512', 
+                          function(err, key){
+                if(err)
+                    throw err;
+                database['password'].push({salt:salt,iterations:iterations,
+                                           hash:key.toString('hex')});
+            }); 
+            
+            database['email'].push(data.email);
             database['username'].push(data.username);
-            database['password'].push(data.password);
             database['secretQuestion'].push(data.secretQuestion);          
             var userId;
                    
@@ -200,19 +240,20 @@ function main(){
             }
                
             database['uid'].push(userId);
-            database[data.username + '#' + userId] = 
-                {friends:[], requestsFrom:[], level:0, wins:0, state:"offline", lastState:''};
-            characters[data.username + userId] = [];
-            decks[data.username + userId] = [];
-            fs.writeFile('betaDummy.json', JSON.stringify(database));
-            fs.writeFile('decks.json', JSON.stringify(decks));
-            fs.writeFile('characters.json', JSON.stringify(characters));
+            database[data.username + '#' + userId] = {friends:[], requestsFrom:[], 
+                                            level:0, wins:0, state:'offline',lastState:''};
+            characters[data.username + '#'+ userId] = [];
+            decks[data.username + '#'+ userId] = [];
+            console.log(data.email + ' EM_PAS ' + data.password);
+        });
+        
+        socket.on('updateUserData', function(data){
+            socket.emit('newUserData', {profile:database[data.username+data.userID]});
         });
         
         socket.on('CreatedDeck', function(data){
             decks[data.username+data.userID]
                 .push({name: data.deckName, deck: data.deck, isUsable: data.isUsable});
-            fs.writeFile('decks.json', JSON.stringify(decks));
         });
         
         socket.on('CH01', function(from, msg){
@@ -220,10 +261,10 @@ function main(){
         });
         
         socket.on('CreatedCharacters', function(data){
+            console.log(data.username + ' ' + data.userID);    
+            
             characters[data.username+data.userID]
-                .push({name:data.name, level:data.level,exp:data.exp,class:data.class, 
-                       spells:data.spells});
-            fs.writeFile('characters.json', JSON.stringify(characters));
+                .push({name:data.name,level:data.level,exp:data.exp, spells:data.spells});
         });
         
         socket.on('SendMessage', function(data){
@@ -254,9 +295,11 @@ function main(){
         });
         
         socket.on('SendFriendRequest', function(data){
-          if(findElement(database[data.reciever]['requestsFrom'], data.username+data.userID)){
-            database[data.reciever]['requestsFrom'].push(data.username+data.userID);
-            fs.writeFile('betaDummy.json', JSON.stringify(database));
+        var hasAlreadySent = findElement(database[data.reciever]['requestsFrom'],   
+                                         data.username+data.userID);
+            
+          if(!hasAlreadySent && hasAlreadySent != 0){
+              database[data.reciever]['requestsFrom'].push(data.username+data.userID);
           }
         });
         
@@ -266,32 +309,219 @@ function main(){
              database[data.concordant]['requestsFrom'].splice(nameAt, 1);
              database[data.concordant]['friends'].push(data.requester);
              database[data.requester]['friends'].push(data.concordant);
-             database['chat'][data.requester + '-' + data.concordant] = [];
-            console.log(data.requester+'-'+data.concordant);
-            
-            fs.writeFile('betaDummy.json', JSON.stringify(database));
+             database['chat'][data.requester + '-' + data.concordant] = [];    
         });
         
         socket.on('ChangeState', function(data){
             database[data.username+data.userID]['state']=data.state;
-            fs.writeFile('betaDummy.json', JSON.stringify(database));
         });
         
         socket.on('StateLoggedOut', function(data){
+            
             database[data.username+data.userID]['state']= 'offline';
             database[data.username+data.userID]['lastState'] = data.state;
-            
-            fs.writeFile('betaDummy.json', JSON.stringify(database));
         });
         
         //play Game
         socket.on('QueuePlayGame', function(data){
-            queuedFor['playGame'].push(data.username+data.userID);
-            var isOpponentFound = false;
+            //add the player to the queue and after an interval search for an opponent
+            playGame.push(data.username+data.userID);
             
-            socket.emit('matchFound',{isFound: isOpponentFound});
+            setInterval(function(){    
+                var isOpponentFound = false,
+                    length = playGame.length,
+                    user = data.username+data.userID,
+                    queueIndex = findElement(playGame, 
+                                             data.username+data.userID);
+                                       
+                console.log(queueIndex);
+                    if(queueIndex == undefined){
+                        for(var i = 0; i<inGame.length; i+=1){
+                            if(inGame[i][0] == user || 
+                               inGame[i][1] == user){
+                                isOpponentFound = true;
+                                console.log(user);
+                            }
+                        }
+                    }
+                
+                    else if(length == 1){
+                        isOpponentFound = false;
+                        playGame.pop();
+                    }
+                    
+                    else if(length > 1){
+                        isOpponentFound = true;
+                        var p1Data = {playerFieldsVectors:['','','','','',''],
+                                         playerCardsVectors:[],
+                                         characterClass:'',
+                                         deck:[]
+                                     },
+                            p2Data = {playerFieldsVectors:['','','','','',''],
+                                         playerCardsVectors:[],
+                                         characterClass:'',
+                                         deck:[]
+                                     };
+                                
+                        var coinFlip = Math.round(Math.random() * 100);
+                        if(coinFlip > 50){
+                            inGame.push([playGame[queueIndex+1],user,
+                             p1Data,p2Data,true,{defender:-1, defenderFieldName:'',
+                            attacker:-1}, {cardCan:'',onField:NaN, onIndex:NaN},
+                            {markedCursor:'',cursorPosition:-1,
+                             character:undefined, spellIndex:-1}]);
+                        }   
+                        
+                        // true stands for playerOne is on turn
+                        else{
+                             inGame.push([user,playGame[queueIndex+1], p1Data,p2Data,true,
+                                          {defender:'', defenderFieldName:'',
+                             attacker:''},{cardCan:'',onField:NaN, onIndex:NaN, 
+                                           changingFieldIndex:NaN},
+                                          {markedCursor:'',cursorPosition:-1,
+                                          character:undefined, spellIndex:-1}]);
+                        }
+                        playGame.splice(queueIndex, 2);
+                    }
+                
+                socket.emit('matchFound',{isFound: isOpponentFound});
+                clearInterval(this);
+            }, 10000);
             
-            fs.writeFile('queuedFor.json', JSON.stringify(queuedFor));
+            socket.on('initGame', function(data){
+                var index={gameOrder:undefined,player:undefined},
+                    user = data.username+data.userID;
+                
+                for(var i = 0; i < inGame.length; i+=1){
+                    if(inGame[i][0] == user){
+                        index.gameOrder = i;
+                        index.player = 0;
+                        break;
+                    }
+                    
+                    else if(inGame[i][1] == user){
+                        index.gameOrder = i;
+                        index.player = 1;
+                        break;
+                    }
+                }
+                inGame[index.gameOrder][index.player+2]
+                                                ['characterClass'] = data.characterClass;
+                inGame[index.gameOrder][index.player+2]['deck'] = data.deck;
+                socket.emit('placement', {gameOrder:index.gameOrder,player:index.player});
+            });
+        });
+        
+        var isChanged;
+        // read the gameDatas, find playerData and add his card
+        socket.on('spawnCard', function(data){
+            isChanged = true;
+            var currentGame = inGame[data.gameOrder][data.playerIndex+2];
+                
+            currentGame.playerFieldsVectors[data.fieldIndex] = data.cardName;
+        });
+        
+        socket.on('battle', function(data){
+            isChanged = true;
+            var currentGame = inGame[data.gameOrder];
+            currentGame[5].defender = data.defenderField;
+            currentGame[5].attacker = data.attackerField;
+            currentGame[5].defenderFieldName = data.defenderFieldName;
+            console.log(currentGame[5]);
+          });
+        socket.on('spellCasted', function(data){
+            var currentGame = inGame[data.gameOrder];
+            currentGame[7].markedCursor=data.markedCursor;
+            currentGame[7].character=data.character;
+            currentGame[7].cursorPosition=data.cursorPosition;
+            currentGame[7].spellIndex =data.spellIndex;
+            console.log(currentGame[7]);
+            isChanged = true;
+        });
+        socket.on('cardCan', function(data){
+            isChanged = true;
+            var currentGame = inGame[data.gameOrder];
+            currentGame[6].cardCan = data.cardCan;
+            currentGame[6].onField = data.onField;
+            currentGame[6].onIndex = data.onIndex;
+            currentGame[6].changingFieldIndex = data.changingFieldIndex;
+            console.log(currentGame[6]);
+        });
+        
+        socket.on('enemyFields', function(data){
+            console.log(data.vector +  ' ' + inGame[data.gameOrder][data.playerIndex]);
+        });
+        
+        //find enemyData and send his field
+        socket.on('playerRequestData', function(data, fn){
+            var currentGame = inGame[data.gameOrder];
+            
+            var enemyData;
+            if(data.playerIndex == 0)
+                enemyData = 3;
+            else
+                enemyData = 2;
+           
+            socket.emit('battleReport'+currentGame[data.playerIndex],{
+                enemyFields:currentGame[enemyData].playerFieldsVectors, // spawnedNewCard
+                cardCan:currentGame[6].cardCan,
+                onField:currentGame[6].onField, // card special thing
+                onIndex:currentGame[6].onIndex,
+                changingFieldIndex:currentGame[6].changingFieldIndex,
+                defenderField:currentGame[5].defender,  // battle
+                defenderFieldName: currentGame[5].defenderFieldName, 
+                attackerField:currentGame[5].attacker,
+                markedCursor:currentGame[7].markedCursor, // spell casted
+                cursorPosition:currentGame[7].cursorPosition,
+                character:currentGame[7].character,
+                spellIndex:currentGame[7].spellIndex}, function(confirmation){
+                currentGame[3].playerFieldsVectors=['','','','','',''];
+                currentGame[2].playerFieldsVectors=['','','','','',''];
+                
+                currentGame[7].markedCursor='';
+                currentGame[7].character=undefined;
+                currentGame[7].cursorPosition=-1;
+                currentGame[7].spellIndex = -1;
+                currentGame[6].cardCan = '';
+                currentGame[6].onField = '';
+                currentGame[6].onIndex = NaN;
+                currentGame[6].changingFieldIndex = NaN;
+                currentGame[5] = {defender:NaN, defenderFieldName:'',attacker:NaN};
+            }); 
+        });
+        // add ended Player data and get game[4](isPlayer's one turn)
+        socket.on('endTurn', function(data){ 
+            var currentGame = inGame[data.gameOrder];
+            
+            if(data.playerIndex == 0)
+                currentGame[4]=false;
+            else
+                currentGame[4]=true;
+         
+            currentGame[data.playerIndex+2].playerTauntsOfFiled=data.playerTauntsOfFiled;
+            currentGame[data.playerIndex+2].playerCardsVectors=data.playerCardsVectors;        
+        });
+        // recieve ended player data
+        socket.on('requestStartTurn', function(data){
+            var currentGame = inGame[data.gameOrder]; 
+            var enemyData;
+            
+            if(data.playerIndex == 0)
+                enemyData = 3;
+            else
+                enemyData = 2;
+           
+            
+            if((currentGame[4] && data.playerIndex == 0) ||
+               (!currentGame[4] && data.playerIndex == 1))
+                socket.emit('startTurn'+currentGame[data.playerIndex],
+                          {attackedFromFields:currentGame[enemyData].attackedFromFields,                            playerCardsVectors:currentGame[enemyData].playerCardsVectors});
+        });
+        
+        socket.on('disconnect', function(){
+            fs.writeFileSync('betaDummy.json', JSON.stringify(database));
+            fs.writeFileSync('decks.json', JSON.stringify(decks));
+            fs.writeFileSync('characters.json', JSON.stringify(characters));
         });
     });
     console.log('Server is running on port 1234');
@@ -305,8 +535,6 @@ function findElement(array, element){
         if(array[i] == element)
             return i;
     }
-    
-    return -1;
 }
 
 function displayForm(res){
