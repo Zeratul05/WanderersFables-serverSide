@@ -1,0 +1,6 @@
+1)make each mode an html page where the text is the buttons for moving through other pages
+2) playGame will be drawing canvas where there will be a specific border for the cards 
+on the field and the cards in the hand
+2) will be the hardest thing
+
+LEFT THINGS: PLAYGAME,CHAT, GRAPHICS(CARDS, background), forge, create character

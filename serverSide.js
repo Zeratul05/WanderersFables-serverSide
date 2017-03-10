@@ -1,18 +1,21 @@
 var fs = require('fs'),
     http = require('http'),
-    crypto=require('crypto'),
-    request = require('request'),
-    util = require('util'),
-    express = require('express'),
-    app = express(),
-    router = express.Router();
+    URL = require('url'),
+    crypto=require('crypto');
 
-function main(){
+var currentPageName = './CardGame/pages/index.html';
+
+function main(){ 
  var server = http.createServer(function(req, res){
         var headers  = req.headers,
             method = req.method,
             url = req.url,
             body = [];
+
+        var pathName = URL.parse(url).pathname;
+   //     console.log('Request for ' + pathName + ' recieved');
+        if(pathName == '/')
+            console.log(pathName);
 
         req.on('error', function(err){
             console.error(err);
@@ -29,13 +32,54 @@ function main(){
             res.statusCode = 200;
             res.setHeader('Content-Type', 'application/json');
 
-            console.log(method);
+            if(pathName == '/'){
+                fs.readFile(currentPageName, function (err, html) {
+                    if(err)
+                        throw err;
+
+                    res.writeHeader(200, {'Content-Type': 'text/html'});
+                    res.write(html);
+                    res.end();
+                });
+            }
+
+            if(pathName.substring(pathName.length- 5) == '.html'){
+                fs.readFile('./CardGame/pages' + pathName, function (err, html) {
+                    if(err)
+                        throw err;
+
+                    res.writeHeader(200, {'Content-Type': 'text/html'});
+                    res.write(html);
+                    res.end();
+                });
+            }
+
+            if(pathName.substring(pathName.length-3) == '.js'){
+                fs.readFile('./CardGame/' + pathName, function (err, data){
+                    if(err)
+                        throw err;
+
+                    res.write(data);
+                    res.end();
+                });
+            }
+
+            if(pathName.substring(pathName.length-4) == '.png' || pathName.substring(pathName.length-4) == '.jpg'){
+                fs.readFile('./CardGame'+pathName, function(err,data){
+                    if(err)
+                        throw err;
+
+                    res.write(data);
+                    res.end();
+                });
+            }
         });
     }).listen(1234); 
     
     var io = require('socket.io')(server),
         sequence = 1,
         clients = [];
+        
     var database = JSON.parse(fs.readFileSync('betaDummy.JSON'));
     var decks = JSON.parse(fs.readFileSync('decks.JSON'));
     var characters = JSON.parse(fs.readFileSync('characters.json'));
@@ -53,6 +97,7 @@ function main(){
                 clients.splice(index, 1);
                 console.info('Client gone (id= ' + socket.id+').');
             }
+
             // update database
             fs.writeFileSync('betaDummy.json', JSON.stringify(database));
             fs.writeFileSync('decks.json', JSON.stringify(decks));
@@ -60,8 +105,11 @@ function main(){
         });
 
         var isLoggedIn;
-        
+
+        socket.emit('serverMessage', {message:'message is this'});
+
         socket.on('LogIn', function(data){
+            console.log('LOGGGING.........');
             var emailIndex =findElement(database['email'],data.email),
                 emailPassword = database['password'][emailIndex],
                 username = database['username'][emailIndex];
@@ -85,22 +133,19 @@ function main(){
                         database[username+userId]['lastState'];
             
                     socket.emit('LogConfirm', {isLogged: isLoggedIn});
-                    socket.emit('userData', 
-                                {state:database[username+userId]['lastState'],
+                    socket.emit('userData', {state:database[username+userId]['lastState'],
                                 username: username, userID: userId,
-                                 profile: database[username+userId],
-                                 chars: characters[username+userId],
-                                 createdDecks: decks[username+userId]});
+                                profile: database[username+userId],
+                                chars: characters[username+userId],
+                                createdDecks: decks[username+userId]});
                 }
                 
-                else{
+                else
                     socket.emit('LogConfirm', {isLogged: isLoggedIn});
-                }
             });
             
-            if(!isLoggedIn){       
+            if(!isLoggedIn)  
                 return;
-            }
         });
                 
         socket.on('Register', function(data){
@@ -145,13 +190,17 @@ function main(){
             console.log(data.email + ' EM_PAS ' + data.password);
         });
         
+        socket.on('changeHtmlPage', function(data){
+            console.log('switch to ' + data.pageName);
+            currentPageName = data.pageName;
+        });
+
         socket.on('updateUserData', function(data){
             socket.emit('newUserData', {profile:database[data.username+data.userID]});
         });
         
         socket.on('CreatedDeck', function(data){
-            decks[data.username+data.userID]
-                .push({name: data.deckName, deck: data.deck, isUsable: data.isUsable});
+            decks[data.username+data.userID].push({name: data.deckName, deck: data.deck, isUsable: data.isUsable});
         });
         
         socket.on('CH01', function(from, msg){
@@ -161,10 +210,14 @@ function main(){
         socket.on('CreatedCharacters', function(data){
             console.log(data.username + ' ' + data.userID);    
             
-            characters[data.username+data.userID]
-                .push({name:data.name,level:data.level,exp:data.exp, spells:data.spells});
+            characters[data.username+data.userID].push({name:data.name,level:data.level,exp:data.exp, spells:data.spells});
         });
         
+        socket.on('changedCharacter', function(data){
+            console.log(data.newCharacter);
+            characters[data.username+data.userID][data.charIndex]=data.newCharacter;
+        });
+
         socket.on('SendMessage', function(data){
            var chatDb = database['chat'],
                chatHeading = data.sender + data.senderID + '-' + data.deliverTo;
@@ -180,8 +233,7 @@ function main(){
            }
             
            else{
-               chatDb[chatHeading]
-                   .push(data.sender+': ' + data.message);
+               chatDb[chatHeading].push(data.sender+': ' + data.message);
            }
             
             socket.emit('AllChats', {chat:chatDb[chatHeading]});
@@ -224,6 +276,7 @@ function main(){
         socket.on('QueuePlayGame', function(data){
             //add the player to the queue and after an interval search for an opponent
             playGame.push(data.username+data.userID);
+            console.log('QUEUED ' + data.username+data.userID);
             // after the interval the queue takes actions
             setInterval(function(){
                 var isOpponentFound = false,
@@ -233,9 +286,9 @@ function main(){
 
                     // if he is not found the queue, he is inGame
                     if(queueIndex == undefined){
+                        console.log('he is inGame');
                         for(var i = 0; i<inGame.length; i+=1){
-                            if(inGame[i][0] == user || 
-                               inGame[i][1] == user){
+                            if(inGame[i][0] == user || inGame[i][1] == user){
                                 isOpponentFound = true;
 
                                 if(inGame[i][0] == user)
@@ -256,6 +309,7 @@ function main(){
                 
                     // if the user if the only one queued he is kicked out
                     else if(length == 1){
+                        console.log('was only');
                         isOpponentFound = false;
                         playGame.pop();
                     }
@@ -268,11 +322,19 @@ function main(){
                             p2Data = {playerFields:['','','','','',''], playerHand:[],
                                          characterClass:'', deck:[] };
                                 
-                        // to determine the first Player
+                        // to determine xthe first Player
                         var coinFlip = Math.round(Math.random() * 100);
                         if(coinFlip > 50){
+                            console.log('inGame n');
+                            var randomMode = Math.round(Math.random() * 1);
+                            var playMode = 'Normal';                            
+                            // 0 is for normal
+
+                            if(randomMode == 1)
+                                playMode = 'Dominion';
+
                             inGame.push([playGame[queueIndex+1],user,p1Data,p2Data,true, [], 
-                            {cardCan:'',onField:NaN, onIndex:NaN,changingFieldIndex:NaN},[],'Main Battle']);
+                            {cardCan:'',onField:NaN, onIndex:NaN,changingFieldIndex:NaN},[],'Main Battle', playMode]);
 
                              // add to p2Data user's socket
                              p2Data.socket = socket;
@@ -280,15 +342,22 @@ function main(){
                         
                         // true stands for playerOne is on turn
                         else{ //0,1:names; 2,3:datas; 4:isP1turn; 5:battles; 6:cardSpecial; 7:spells, 8:Battle's Location
+                            console.log('inGame y');
+                            var randomMode = Math.round(Math.random() * 1);
+                            var playMode = 'Normal';
+                            // 0 is for normal
+                            if(randomMode == 1)
+                                playMode = 'Dominion';
+
                              inGame.push([user,playGame[queueIndex+1], p1Data, p2Data,true,[], 
-                             {cardCan:'',onField:NaN, onIndex:NaN,changingFieldIndex:NaN}, [], 'Main Battle']);
+                             {cardCan:'',onField:NaN, onIndex:NaN,changingFieldIndex:NaN}, [], 'Main Battle', playMode]);
 
                              // add to p1Data user's socket
                              p1Data.socket = socket;
                         }
                         playGame.splice(queueIndex, 2);
                     }
-                
+                    
                 socket.emit('matchFound',{isFound: isOpponentFound});
                 clearInterval(this);
             }, 10000);
@@ -315,7 +384,7 @@ function main(){
                 
                 currentGame[index.player+2]['characterClass'] = data.characterClass;
                 currentGame[index.player+2]['deck'] = data.deck;
-                socket.emit('placement', {gameOrder:index.gameOrder,player:index.player});
+                socket.emit('placement', {gameOrder:index.gameOrder,player:index.player, playMode:currentGame[9]});
             });
         });
         
@@ -333,7 +402,6 @@ function main(){
             else
                 enemyData = 2;
             
-
             console.log('Enemy socket: ' + currentGame[enemyData].socket.id  + '\n' +
             'Player socket: ' + currentGame[data.playerIndex+2].socket.id); 
 
@@ -437,13 +505,26 @@ function main(){
                 enemyData = 3;
             else
                 enemyData = 2;
-           
             
             if((currentGame[4] && data.playerIndex == 0) ||
                (!currentGame[4] && data.playerIndex == 1))
                 socket.emit('startTurn'+currentGame[data.playerIndex],
                           {attackedFromFields:currentGame[enemyData].attackedFromFields,
                               playerHand:currentGame[enemyData].playerHand});
+        });
+
+        socket.on('surrender', function(data){
+            var currentGame = inGame[data.gameOrder]; 
+            var enemyIndex;
+            
+            if(data.playerIndex == 0)
+                enemyIndex = 1;
+            else
+                enemyIndex = 0;
+                console.log(data.playerIndex + ' GO');
+            currentGame[enemyIndex+2].socket.emit('enemySurrendered');      
+
+            inGame.splice(data.gameOrder, 1);
         });
     });
     console.log('Server is running on port 1234');
