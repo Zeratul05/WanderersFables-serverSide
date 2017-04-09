@@ -1,6 +1,13 @@
 1)make each mode an html page where the text is the buttons for moving through other pages
 2) playGame will be drawing canvas where there will be a specific border for the cards 
-on the field and the cards in the hand
-2) will be the hardest thing
+on the field and the cards in the hand. will be the hardest thing-> done
+3) change the colors to be for everyone(daltonism)
+4) some cards to not initialize their attack/defence on the user seen field-> think is done
+5) return the card from which the boon has come (cardCan)
+6) animations
+7) dropList of forge and maybe alter of heroes
+8) search button in the forge and the alter of heroes for the spells
+* deal with the bug of cardCan when sending info
+    
 
 LEFT THINGS: PLAYGAME,CHAT, GRAPHICS(CARDS, background), forge, create character

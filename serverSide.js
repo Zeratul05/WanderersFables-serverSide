@@ -96,6 +96,21 @@ function main(){
             if(index != -1){
                 clients.splice(index, 1);
                 console.info('Client gone (id= ' + socket.id+').');
+
+                // look if he is in game or in queue
+                
+                for(var i = 0; i < inGame.length; i+=1){
+                    if(inGame[i][2].socket == socket){
+                        inGame[i][3].socket.emit('enemySurrendered');
+                        inGame.splice(i, 1);
+                        break;
+                    }
+                    else if(inGame[i][3].socket == socket){
+                        inGame[i][2].socket.emit('enemySurrendered');
+                        inGame.splice(i, 1);
+                        break;
+                    }
+                }
             }
 
             // update database
@@ -116,7 +131,7 @@ function main(){
             
             // the email does not exist return login has failed
             if(emailIndex == undefined){
-                console.log(data.email + ' - ' + emailIndex);
+;                console.log(data.email + ' - ' + emailIndex);
                 socket.emit('LogConfirm', {isLoggedIn: isLoggedIn});
                 return;
             }
@@ -200,7 +215,10 @@ function main(){
         });
         
         socket.on('CreatedDeck', function(data){
-            decks[data.username+data.userID].push({name: data.deckName, deck: data.deck, isUsable: data.isUsable});
+            console.log(data.deck);
+            console.log(data.deckIndex);
+            
+                decks[data.username+data.userID].push({name: data.deckName, deck: data.deck, isUsable: data.isUsable});
         });
         
         socket.on('CH01', function(from, msg){
@@ -216,6 +234,11 @@ function main(){
         socket.on('changedCharacter', function(data){
             console.log(data.newCharacter);
             characters[data.username+data.userID][data.charIndex]=data.newCharacter;
+        });
+
+        socket.on('changedDeck', function(data){
+            decks[data.username+data.userID][data.deckIndex]=data.deck;
+            console.log(data.deck);
         });
 
         socket.on('SendMessage', function(data){
@@ -336,7 +359,7 @@ function main(){
                             inGame.push([playGame[queueIndex+1],user,p1Data,p2Data,true, [], 
                             {cardCan:'',onField:NaN, onIndex:NaN,changingFieldIndex:NaN},[],'Main Battle', playMode]);
 
-                             // add to p2Data user's socket
+                             // add to p2Data user's socketw
                              p2Data.socket = socket;
                         }
                         
@@ -394,6 +417,7 @@ function main(){
             isChanged = true;
             var currentGame = inGame[data.gameOrder];
             currentGame[data.playerIndex+2].playerFields[data.fieldIndex] = data.cardName;
+            currentGame[data.playerIndex+2].handIndex=data.handIndex;
             console.log(data.cardName);
 
             var enemyData;
@@ -409,6 +433,7 @@ function main(){
 
             currentGame[enemyData].socket.emit('enemySpawnedCard',{
                 enemyFields:currentGame[data.playerIndex+2].playerFields,
+                handIndex:currentGame[data.playerIndex+2].handIndex,
                 pointOn:data.pointOn
             });
         });
@@ -480,6 +505,17 @@ function main(){
             currentGame[6].onIndex = data.onIndex;
             currentGame[6].changingFieldIndex = data.changingFieldIndex;
             console.log(currentGame[6]);
+
+            var enemyData;
+            if(data.playerIndex == 0)
+                enemyData = 3;
+            else
+                enemyData = 2;
+
+            currentGame[enemyData].socket.emit('enemyCardEffect', {
+                                pointOn:data.pointOn, cardCan:currentGame[6].cardCan,
+                                onField:currentGame[6].onField, onIndex:currentGame[6].onIndex,
+                                changingFieldIndex:currentGame[6].changingFieldIndex});     
         });
         
         // add ended Player data and get game[4](isPlayer's one turn)
@@ -506,6 +542,9 @@ function main(){
             else
                 enemyData = 2;
             
+            if(!currentGame)
+                return;
+
             if((currentGame[4] && data.playerIndex == 0) ||
                (!currentGame[4] && data.playerIndex == 1))
                 socket.emit('startTurn'+currentGame[data.playerIndex],
