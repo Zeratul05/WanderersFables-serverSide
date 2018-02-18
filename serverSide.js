@@ -5,6 +5,14 @@ var fs = require('fs'),
 
 var currentPageName = './CardGame/pages/index.html';
 
+//deleting the magic numbers
+var battleIndex = 5,
+    boonIndex = 6,
+    castIndex = 7,
+    modIndex = 9,
+    updateIndex = 10,
+    uniqCardsIndex = 11;
+
 function main(){ 
  var server = http.createServer(function(req, res){
         var headers  = req.headers,
@@ -141,7 +149,6 @@ function main(){
                               function(err, key){
                 if(key.toString('hex') == emailPassword.hash){
                     isLoggedIn = true;
-                    console.log('treeasi');
                     var userId = '#' + database['uid'][emailIndex];
                 
                     database[username+userId]['state']=
@@ -307,7 +314,7 @@ function main(){
                     user = data.username+data.userID,
                     queueIndex = findElement(playGame, data.username+data.userID);
 
-                    // if he is not found the queue, he is inGame
+                    // if he is not found in the queue, he is inGame
                     if(queueIndex == undefined){
                         console.log('he is inGame');
                         for(var i = 0; i<inGame.length; i+=1){
@@ -319,12 +326,8 @@ function main(){
                                 else
                                     inGame[i][3].socket = socket;
                                     
-                                inGame[i][2].socket.emit('enemyPlacement', {});
-                                inGame[i][3].socket.emit('enemyPlacement', {});
-
-                                console.log('P1 socket: ' + inGame[i][2].socket.id  + '\n' +
-                                            'P2 socket: ' + inGame[i][3].socket.id); 
-
+                                
+                                console.log(inGame[i][2].socket.id + ' vs ' + inGame[i][3].socket.id);
                                 // there is a gurantee that this is the late arival player
                             }
                         }
@@ -336,14 +339,14 @@ function main(){
                         isOpponentFound = false;
                         playGame.pop();
                     }
-                    
-                    // if there is another user match with him
+
+                    // if there is another user, start a game with him
                     else if(length > 1){
                         isOpponentFound = true;
-                        var p1Data = {playerFields:['','','','','',''],playerHand:[],
-                                         characterClass:'', deck:[]},
-                            p2Data = {playerFields:['','','','','',''], playerHand:[],
-                                         characterClass:'', deck:[] };
+                        var p1Data = {playerFields:['','','','','',''],playerHand:[], socket,
+                                         characterClass:'', deck:[], fieldIndex:NaN, handIndex:NaN, cardName:''},
+                            p2Data = {playerFields:['','','','','',''], playerHand:[], socket,
+                                         characterClass:'', deck:[], fieldIndex:NaN, handIndex:NaN, cardName:''};
                                 
                         // to determine xthe first Player
                         var coinFlip = Math.round(Math.random() * 100);
@@ -356,8 +359,9 @@ function main(){
                             if(randomMode == 1)
                                 playMode = 'Dominion';
 
-                            inGame.push([playGame[queueIndex+1],user,p1Data,p2Data,true, [], 
-                            {cardCan:'',onField:NaN, onIndex:NaN,changingFieldIndex:NaN},[],'Main Battle', playMode]);
+                            inGame.push([playGame[queueIndex+1],user,p1Data,p2Data,true, {}, 
+                            {cardCan:'',onField:NaN, onIndex:NaN,changingFieldIndex:NaN},{},'Main Battle', playMode,
+                        {updateCounter:0,updateUniqCounter:0}, []]);
 
                              // add to p2Data user's socketw
                              p2Data.socket = socket;
@@ -366,14 +370,15 @@ function main(){
                         // true stands for playerOne is on turn
                         else{ //0,1:names; 2,3:datas; 4:isP1turn; 5:battles; 6:cardSpecial; 7:spells, 8:Battle's Location
                             console.log('inGame y');
-                            var randomMode = Math.round(Math.random() * 1);
+                            var randomMode = Math.round(Math.random() * 0);
                             var playMode = 'Normal';
                             // 0 is for normal
                             if(randomMode == 1)
                                 playMode = 'Dominion';
 
-                             inGame.push([user,playGame[queueIndex+1], p1Data, p2Data,true,[], 
-                             {cardCan:'',onField:NaN, onIndex:NaN,changingFieldIndex:NaN}, [], 'Main Battle', playMode]);
+                            inGame.push([playGame[queueIndex+1],user,p1Data,p2Data,true, {}, 
+                                {cardCan:'',onField:NaN, onIndex:NaN,changingFieldIndex:NaN},{},'Main Battle', playMode,
+                            {updateCounter:0, updateUniqCounter:0}, []]);
 
                              // add to p1Data user's socket
                              p1Data.socket = socket;
@@ -407,7 +412,7 @@ function main(){
                 
                 currentGame[index.player+2]['characterClass'] = data.characterClass;
                 currentGame[index.player+2]['deck'] = data.deck;
-                socket.emit('placement', {gameOrder:index.gameOrder,player:index.player, playMode:currentGame[9]});
+                socket.emit('placement', {gameOrder:index.gameOrder,player:index.player, playMode:currentGame[modIndex]});
             });
         });
         
@@ -417,35 +422,30 @@ function main(){
             isChanged = true;
             var currentGame = inGame[data.gameOrder];
             currentGame[data.playerIndex+2].playerFields[data.fieldIndex] = data.cardName;
+            currentGame[data.playerIndex+2].fieldIndex = data.fieldIndex;
+            currentGame[data.playerIndex+2].cardName = data.cardName
             currentGame[data.playerIndex+2].handIndex=data.handIndex;
-            console.log(data.cardName);
-
+            console.log(data.playerIndex);
+            console.log(data.fieldIndex + 'hey changed fieldIndex' + currentGame[data.playerIndex+2].fieldIndex);
+            
             var enemyData;
             if(data.playerIndex == 0)
                 enemyData = 3;
             else
                 enemyData = 2;
             
-            console.log('Enemy socket: ' + currentGame[enemyData].socket.id  + '\n' +
-            'Player socket: ' + currentGame[data.playerIndex+2].socket.id); 
-
-            console.log('Point on: ' + data.pointOn);
-
-            currentGame[enemyData].socket.emit('enemySpawnedCard',{
-                enemyFields:currentGame[data.playerIndex+2].playerFields,
-                handIndex:currentGame[data.playerIndex+2].handIndex,
-                pointOn:data.pointOn
-            });
+            currentGame[updateIndex].updateCounter++;                            
+        //    console.log('Enemy socket: ' + currentGame[enemyData].socket.id  + '\n' +
+          //  'Player socket: ' + currentGame[data.playerIndex+2].socket.id); 
         });
         
         socket.on('battle', function(data){
             isChanged = true;
             var currentGame = inGame[data.gameOrder];
-            currentGame[5].push({
-            defender:data.defenderField,
-            attacker:data.attackerField,
-            defenderFieldName:data.defenderFieldName});
-            console.log(currentGame[5][currentGame[5].length-1]);
+            var battleInfo = {defenderIndex:data.defenderIndex,attackerIndex:data.attackerIndex,
+                defenderField:data.defenderField};
+            currentGame[battleIndex]=battleInfo;
+
 
             var enemyData;
             if(data.playerIndex == 0)
@@ -453,12 +453,8 @@ function main(){
             else
                 enemyData = 2;
 
-            console.log('Battle Point on: ' + data.pointOn);
-
-             currentGame[enemyData].socket.emit('enemyBattle',{
-                 enemyBattles:currentGame[5],
-                 pointOn:data.pointOn
-             });
+            currentGame[updateIndex].updateCounter++;                
+       //      currentGame[enemyData].socket.emit('enemyBattle',{battleInfo});
           });
 
         socket.on('setPrisoner', function(data){
@@ -483,10 +479,10 @@ function main(){
 
         socket.on('spellCasted', function(data){
             var currentGame = inGame[data.gameOrder];
-            currentGame[7].push({markedCursor:data.markedCursor, character:data.character,
-                cursorPosition:data.cursorPosition, spellIndex: data.spellIndex});
+            var spellInfo = {markedCursor:data.markedCursor, character:data.character,
+                cursorPosition:data.cursorPosition, spellIndex: data.spellIndex};
+            currentGame[castIndex]=spellInfo;
  
-            console.log(currentGame[7]);
 
             var enemyData;
             if(data.playerIndex == 0)
@@ -494,30 +490,88 @@ function main(){
             else
                 enemyData = 2;
 
-            currentGame[enemyData].socket.emit('enemySpellsCasted', {enemySpellsCasted:currentGame[7]});     
+            currentGame[updateIndex].updateCounter++;            
+      //      currentGame[enemyData].socket.emit('enemySpellsCasted', {enemySpellsCasted:spellInfo});     
         });
 
         socket.on('cardCan', function(data){
             isChanged = true;
             var currentGame = inGame[data.gameOrder];
-            currentGame[6].cardCan = data.cardCan;
-            currentGame[6].onField = data.onField;
-            currentGame[6].onIndex = data.onIndex;
-            currentGame[6].changingFieldIndex = data.changingFieldIndex;
-            console.log(currentGame[6]);
+            currentGame[boonIndex].cardCan = data.cardCan;
+            currentGame[boonIndex].onField = data.onField;
+            currentGame[boonIndex].onIndex = data.onIndex;
+            currentGame[boonIndex].changingFieldIndex = data.changingFieldIndex;
 
             var enemyData;
             if(data.playerIndex == 0)
                 enemyData = 3;
             else
                 enemyData = 2;
+                
+            currentGame[updateIndex].updateCounter++;            
+       /*     currentGame[enemyData].socket.emit('enemyCardEffect', {
+                                onField:currentGame[boonIndex].onField,
+                                 onIndex:currentGame[boonIndex].onIndex,  cardCan:currentGame[boonIndex].cardCan,
+                                changingFieldIndex:currentGame[boonIndex].changingFieldIndex});     
+       */});
 
-            currentGame[enemyData].socket.emit('enemyCardEffect', {
-                                pointOn:data.pointOn, cardCan:currentGame[6].cardCan,
-                                onField:currentGame[6].onField, onIndex:currentGame[6].onIndex,
-                                changingFieldIndex:currentGame[6].changingFieldIndex});     
+        socket.on('uniqActions', function(data){
+            var currentGame = inGame[data.gameOrder];
+            var playerIndex = data.playerIndex;
+
+            currentGame[uniqCardsIndex] = data.uniqActions;
+            console.log(data.uniqActions.length + ' UNIQ LENGTH');
+            currentGame[updateIndex].updateUniqCounter++;
+
         });
+
+        socket.on('playerRequestData', function(data){
+            var currentGame = inGame[data.gameOrder];
+            var playerIndex = data.playerIndex;
+            var enemyIndex = 0;
+            if(playerIndex == 0)
+                enemyIndex = 1;
+
+            var playerData = currentGame[enemyIndex+2];
+            
+            if(currentGame[playerIndex+2].socket){
+               // console.log("UpdateIndex " + currentGame[updateIndex].updateCounter);
+
+                socket.emit('battleReport'+currentGame[data.playerIndex], {enemyFields:playerData.playerFields,
+                    shandIndex:playerData.handIndex,
+                    fieldIndex:playerData.fieldIndex, cardName:playerData.cardName, /*<-spawnCard*/
+                defenderIndex:currentGame[battleIndex].defenderIndex, attackerIndex:currentGame[battleIndex].attackerIndex,
+                defenderField:currentGame[battleIndex].defenderField, /*<-battle*/ markedCursor:currentGame[castIndex].markedCursor,
+                character:currentGame[castIndex].character, cursorPosition:currentGame[castIndex].cursorPosition, 
+                spellIndex:currentGame[castIndex].spellIndex, /*<-spellCast*/ cardCan:currentGame[boonIndex].cardCan,
+                onField:currentGame[boonIndex].onField, onIndex: currentGame[boonIndex].onIndex, 
+                changingFieldIndex:currentGame[boonIndex].changingFieldIndex, /*updateCounter->*/
+                 updateCounter:currentGame[updateIndex].updateCounter
+                }, function(data){
+                    data.enemyFields = ['','','','','',''];
+                    data.playerFields = ['','','','','',''];
+                    playerData.fieldIndex = NaN;
+                    currentGame[battleIndex] = {};
+                    currentGame[boonIndex] = {};
+                    currentGame[castIndex]={};
+                });
+
+                socket.on('updateBattlefield', function(){
+                    // data.enemyFields = ['','','','','',''];
+                    // data.playerFields = ['','','','','',''];
+                    // playerData.fieldIndex = NaN;
+                })
+            }
+        });
+
+        socket.on('checkUniqActions', function(data){
+            var currentGame = inGame[data.gameOrder];
+            var playerIndex = data.playerIndex;
         
+                socket.emit('recieveUniqActions', {uniqActions:currentGame[uniqCardsIndex], 
+                    updateCounter:currentGame[updateIndex].updateUniqCounter});
+        });
+
         // add ended Player data and get game[4](isPlayer's one turn)
         socket.on('endTurn', function(data){ 
             var currentGame = inGame[data.gameOrder];
@@ -527,29 +581,35 @@ function main(){
             else
                 currentGame[4]=true;
          
-            currentGame[data.playerIndex+2].playerTauntsOfFiled=data.playerTauntsOfFiled;
+            currentGame[data.playerIndex+2].playerTauntsOnFiled=data.playerTauntsOfFiled;
             currentGame[data.playerIndex+2].playerHand=data.playerHand;      
-            currentGame[5] = [];  
-            currentGame[7] = [];
+            currentGame[battleIndex] = [];
+            currentGame[castIndex] = [];
         });
         // recieve ended player data
         socket.on('requestStartTurn', function(data){
-            var currentGame = inGame[data.gameOrder]; 
-            var enemyData;
+           // console.log(data.gameOrder);
             
-            if(data.playerIndex == 0)
-                enemyData = 3;
-            else
-                enemyData = 2;
+            var currentGame = inGame[data.gameOrder]; 
+            var enemyData = currentGame[2];
+            var enemyIndex = 0;
+            
+            if(data.playerIndex == 0){
+                enemyData = currentGame[3];
+                enemyIndex=1;
+            }
             
             if(!currentGame)
                 return;
 
             if((currentGame[4] && data.playerIndex == 0) ||
-               (!currentGame[4] && data.playerIndex == 1))
-                socket.emit('startTurn'+currentGame[data.playerIndex],
-                          {attackedFromFields:currentGame[enemyData].attackedFromFields,
-                              playerHand:currentGame[enemyData].playerHand});
+               (!currentGame[4] && data.playerIndex == 1)){
+
+                socket.emit('startTurn'+currentGame[data.playerIndex], 
+                    {attackedFromFields:currentGame[enemyIndex].attackedFromFields,
+                        playerHand:currentGame[enemyIndex].playerHand, 
+                        updateCounter:currentGame[updateIndex].updateCounter});
+            }
         });
 
         socket.on('surrender', function(data){
