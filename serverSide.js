@@ -111,11 +111,13 @@ function main(){
                     if(inGame[i][2].socket == socket){
                         inGame[i][3].socket.emit('enemySurrendered');
                         inGame.splice(i, 1);
+                        console.log("yo left someone");
                         break;
                     }
                     else if(inGame[i][3].socket == socket){
                         inGame[i][2].socket.emit('enemySurrendered');
                         inGame.splice(i, 1);
+                        console.log("Yo left someone");
                         break;
                     }
                 }
@@ -425,8 +427,6 @@ function main(){
             currentGame[data.playerIndex+2].fieldIndex = data.fieldIndex;
             currentGame[data.playerIndex+2].cardName = data.cardName
             currentGame[data.playerIndex+2].handIndex=data.handIndex;
-            console.log(data.playerIndex);
-            console.log(data.fieldIndex + 'hey changed fieldIndex' + currentGame[data.playerIndex+2].fieldIndex);
             
             var enemyData;
             if(data.playerIndex == 0)
@@ -520,7 +520,6 @@ function main(){
             var playerIndex = data.playerIndex;
 
             currentGame[uniqCardsIndex] = data.uniqActions;
-            console.log(data.uniqActions.length + ' UNIQ LENGTH');
             currentGame[updateIndex].updateUniqCounter++;
 
         });
@@ -532,8 +531,13 @@ function main(){
             if(playerIndex == 0)
                 enemyIndex = 1;
 
+            if(!currentGame[enemyIndex])
+                return;
+
             var playerData = currentGame[enemyIndex+2];
             
+            console.log(inGame.length);
+
             if(currentGame[playerIndex+2].socket){
                // console.log("UpdateIndex " + currentGame[updateIndex].updateCounter);
 
@@ -568,6 +572,9 @@ function main(){
             var currentGame = inGame[data.gameOrder];
             var playerIndex = data.playerIndex;
         
+            if(!currentGame)
+                return;
+
                 socket.emit('recieveUniqActions', {uniqActions:currentGame[uniqCardsIndex], 
                     updateCounter:currentGame[updateIndex].updateUniqCounter});
         });
@@ -589,8 +596,12 @@ function main(){
         // recieve ended player data
         socket.on('requestStartTurn', function(data){
            // console.log(data.gameOrder);
-            
+
             var currentGame = inGame[data.gameOrder]; 
+            
+            if(!currentGame)
+                return;
+
             var enemyData = currentGame[2];
             var enemyIndex = 0;
             
@@ -599,9 +610,6 @@ function main(){
                 enemyIndex=1;
             }
             
-            if(!currentGame)
-                return;
-
             if((currentGame[4] && data.playerIndex == 0) ||
                (!currentGame[4] && data.playerIndex == 1)){
 
@@ -613,20 +621,37 @@ function main(){
         });
 
         socket.on('surrender', function(data){
-            var currentGame = inGame[data.gameOrder]; 
             var enemyIndex;
-            
+
             if(data.playerIndex == 0)
                 enemyIndex = 1;
             else
                 enemyIndex = 0;
-                console.log(data.playerIndex + ' GO');
-            currentGame[enemyIndex+2].socket.emit('enemySurrendered');      
+    
+            if(inGame[data.gameOrder] == undefined)
+                return;
+                
+            inGame[data.gameOrder][enemyIndex+2].socket.emit('enemySurrendered');
+         });
+  
+         socket.on('recievedSurrender', function(data){
+            console.log('Calling  to shut down the game server');
+            var currentGame = inGame[data.gameOrder]; 
+            var enemyIndex;
 
-            inGame.splice(data.gameOrder, 1);
-        });
+            if(data.playerIndex == 0)
+                enemyIndex = 1;
+            else
+                enemyIndex = 0;
+
+            inGame.splice(data.gameOrder, 1); 
+            console.log(inGame.length + ' inGameLength');
+        }); 
     });
     console.log('Server is running on port 1234');
+}
+
+function endGame(data){
 }
 
 function findElement(array, element){
